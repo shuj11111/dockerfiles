@@ -1,0 +1,57 @@
+############################
+# ROS Noetic + CUDA + OpenGL
+############################
+
+FROM shuj1/ubuntu20.04_cudagl_base:latest
+
+ENV ROS_DISTRO=noetic
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+
+# Install ROS
+RUN apt-fast update \
+  && apt-fast install --no-install-recommends -y curl gnupg lsb-release ca-certificates \
+  && sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list' \
+  && curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | apt-key add - \
+  && apt-fast update \
+  && apt-fast install --no-install-recommends -y \
+     ros-${ROS_DISTRO}-desktop \
+     #ros-${ROS_DISTRO}-desktop-full
+     #ros-${ROS_DISTRO}-ros-base
+     python3-rosdep \
+     python3-catkin-tools \
+  && rosdep init && rosdep update \
+  # clean
+  && apt-fast clean \
+  && rm -rf /var/lib/apt/lists/*
+
+
+# Create catkin_ws at $HOME
+RUN if [ ! -d "$HOME/catkin_ws" ]; then \
+    mkdir -p $HOME/catkin_ws/src; fi
+
+RUN cd $HOME/catkin_ws \
+    && catkin init \
+    && catkin config --cmake-args -DCMAKE_BUILD_TYPE=Release \
+    && catkin config --merge-devel \
+    && catkin config --extend /opt/ros/$ROS_DISTRO \
+    && catkin build
+
+RUN if [ ! -d "$HOME/src" ]; then \
+    mkdir -p $HOME/src; fi
+
+
+# Display QT windows.
+ENV QT_X11_NO_MITSHM 1
+
+
+# Setup entrypoint.
+RUN echo "#!/bin/bash" >> /ros_entrypoint.sh \
+  && echo "set -e" >> /ros_entrypoint.sh \
+  && echo "source /opt/ros/noetic/setup.bash" >> /ros_entrypoint.sh \
+  && echo 'exec "$@"' >> /ros_entrypoint.sh \
+  && chmod a+x /ros_entrypoint.sh
+
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["/bin/bash"]
+
